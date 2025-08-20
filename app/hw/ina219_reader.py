@@ -1,6 +1,3 @@
-sudo tee /opt/Motion_No_Cam/app/hw/ina219_reader.py > /dev/null <<'PY'
-from ina219 import INA219
-
 class INA219Reader:
     def __init__(self, shunt_ohms=0.1, address=0x43, busnum=1):
         """
@@ -26,4 +23,3 @@ class INA219Reader:
                         power_w=power_w)
         except Exception:
             return dict()
-PY
