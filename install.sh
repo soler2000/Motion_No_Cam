@@ -11,6 +11,19 @@ apt-get install -y python3-venv python3-dev build-essential \
                    network-manager i2c-tools git curl rsync
 
 systemctl enable NetworkManager.service --now || true
+echo "[+] Preflight: checking I2C bus..."
+
+if [ ! -e /dev/i2c-1 ]; then
+  echo "[!] /dev/i2c-1 not present. Enable I2C and reboot:";
+  echo "    sudo raspi-config nonint do_i2c 0 && sudo reboot";
+  exit 1;
+fi
+
+if command -v i2cdetect >/dev/null 2>&1; then
+  if ! i2cdetect -y 1 | grep -q -E '29|43'; then
+    echo "[i] Warning: i2cdetect didn't show 0x29 or 0x43. Check wiring/addresses.";
+  fi
+fi
 
 echo "[+] Preparing target directory at $APP_DST_DIR"
 mkdir -p "$APP_DST_DIR"

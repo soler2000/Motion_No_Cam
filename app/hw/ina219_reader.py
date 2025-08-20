@@ -1,3 +1,5 @@
+from ina219 import INA219
+
 class INA219Reader:
     def __init__(self, shunt_ohms=0.1, address=0x43, busnum=1):
         """
