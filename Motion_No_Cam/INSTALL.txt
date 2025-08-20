@@ -1,0 +1,46 @@
+Motion_No_Cam – Raspberry Pi OS Bookworm (Pi Zero 2 W)
+
+Prereqs:
+  - Bookworm uses NetworkManager by default. nmcli is available.
+  - Enable I2C:
+      sudo raspi-config nonint do_i2c 0
+    (or add `dtparam=i2c_arm=on` to /boot/firmware/config.txt and reboot)
+  - Reboot after enabling I2C.
+
+Install:
+  1) Copy the Motion_No_Cam/ folder to the Pi (e.g., ~/Motion_No_Cam).
+  2) cd ~/Motion_No_Cam
+  3) sudo ./install.sh
+
+What install.sh does:
+  - Installs apt packages
+  - Creates /opt/Motion_No_Cam, sets up a Python venv, installs pip deps
+  - Runs DB migration, installs systemd unit, enables + starts service
+  - Downloads Chart.js locally for charts
+  - Removes obsolete files safely
+  - Creates ZIP artifact at ~/Motion_No_Cam.zip
+
+Run:
+  - Service:
+      sudo systemctl status motion_wide.service
+  - Browse from iPhone/iPad:
+      http://<pi-ip>:8080
+    If no Wi‑Fi within the configured timeout, AP fallback:
+      SSID: SensorBoard-AP-XXXX (change in Settings)
+      Password: change-me-1234
+
+GitHub:
+  # Create the repo named Motion_No_Cam under soler2000 on GitHub first.
+  cd ~/Motion_No_Cam
+  git init
+  git branch -m main
+  git remote add origin git@github.com:soler2000/Motion_No_Cam.git
+  git add .
+  git commit -m "Initial commit (Motion_No_Cam MVP)"
+  git push -u origin main
+
+Uninstall:
+  sudo systemctl disable --now motion_wide.service
+  sudo rm -rf /opt/Motion_No_Cam
+  sudo rm /etc/systemd/system/motion_wide.service
+  sudo systemctl daemon-reload
