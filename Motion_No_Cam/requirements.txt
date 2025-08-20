@@ -1,0 +1,7 @@
+Flask==3.0.3
+waitress==3.0.0
+psutil==6.0.0
+adafruit-blinka==8.48.0
+adafruit-circuitpython-vl53l1x==1.2.5
+adafruit-circuitpython-neopixel==6.3.12
+pi-ina219==1.4.1
