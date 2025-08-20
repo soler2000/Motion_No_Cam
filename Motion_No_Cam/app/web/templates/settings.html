@@ -1,0 +1,53 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Settings</h2>
+<div class="columns">
+  <form class="panel" id="form-led">
+    <h3>LED Configuration</h3>
+    <label>Master On <input type="checkbox" name="led.master_on" {{ 'checked' if settings['led.master_on']=='true' else '' }}></label>
+    <label>Brightness <input type="number" step="0.05" min="0" max="1" name="led.brightness" value="{{ settings['led.brightness'] }}"></label>
+    <label>White Color <input type="text" name="led.color_white" value="{{ settings['led.color_white'] }}"></label>
+    <label>Warn Color <input type="text" name="led.color_warn" value="{{ settings['led.color_warn'] }}"></label>
+    <label>Warn Enabled <input type="checkbox" name="warn.enabled" {{ 'checked' if settings['warn.enabled']=='true' else '' }}></label>
+    <label>Min Distance (m) <input type="number" step="0.1" name="distance.min_m" value="{{ settings['distance.min_m'] }}"></label>
+    <label>Max Distance (m) <input type="number" step="0.1" name="distance.max_m" value="{{ settings['distance.max_m'] }}"></label>
+    <label>Min Hz <input type="number" step="0.1" name="warn.freq_min_hz" value="{{ settings['warn.freq_min_hz'] }}"></label>
+    <label>Max Hz <input type="number" step="0.1" name="warn.freq_max_hz" value="{{ settings['warn.freq_max_hz'] }}"></label>
+    <button type="button" onclick="savePanel('form-led')">Save LED</button>
+  </form>
+
+  <form class="panel" id="form-wifi">
+    <h3>Wi‑Fi Access</h3>
+    <label>AP SSID <input type="text" name="wifi.ap_ssid" value="{{ settings['wifi.ap_ssid'] }}"></label>
+    <label>AP Password <input type="text" name="wifi.ap_password" value="{{ settings['wifi.ap_password'] }}"></label>
+    <label>Try Seconds <input type="number" name="wifi.try_seconds" value="{{ settings['wifi.try_seconds'] }}"></label>
+    <div class="wifi-scan">
+      <button type="button" onclick="wifiScan()">Scan Networks</button>
+      <ul id="wifi_list"></ul>
+    </div>
+    <div>
+      <input id="wifi_ssid" placeholder="SSID">
+      <input id="wifi_pass" placeholder="Password">
+      <button type="button" onclick="wifiConnect()">Connect</button>
+    </div>
+    <button type="button" onclick="savePanel('form-wifi')">Save Wi‑Fi</button>
+  </form>
+
+  <form class="panel" id="form-system">
+    <h3>System</h3>
+    <label>Shutdown Voltage (V; 0=disabled)
+      <input type="number" step="0.01" name="battery.shutdown_voltage" value="{{ settings['battery.shutdown_voltage'] }}">
+    </label>
+    <label>Empty Voltage (V)
+      <input type="number" step="0.01" name="battery.voltage_empty" value="{{ settings['battery.voltage_empty'] }}">
+    </label>
+    <label>Full Voltage (V)
+      <input type="number" step="0.01" name="battery.voltage_full" value="{{ settings['battery.voltage_full'] }}">
+    </label>
+    <label>Shunt Ohms
+      <input type="number" step="0.01" name="ina219.shunt_ohms" value="{{ settings['ina219.shunt_ohms'] }}">
+    </label>
+    <button type="button" onclick="savePanel('form-system')">Save System</button>
+  </form>
+</div>
+{% endblock %}
