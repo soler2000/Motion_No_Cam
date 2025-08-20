@@ -23,7 +23,6 @@ def settings():
 @app.get("/api/stats")
 def api_stats():
     s = dict(STATE)
-    # Tidy rounding for UI
     if s.get("distance_m") is not None:
         s["distance_m"] = round(s["distance_m"], 1)
     if s.get("bus_voltage_v") is not None:
@@ -44,8 +43,7 @@ def api_history():
 def api_settings():
     data = request.get_json(force=True) or {}
     kv_set_many(data)
-    # >>> HOT RELOAD: tell background threads to re-read settings immediately
-    request_settings_reload()
+    request_settings_reload()   # 🔄 Trigger LED reload
     return jsonify({"ok": True, "reloaded": True})
 
 @app.post("/api/led/test")
@@ -73,7 +71,6 @@ def run():
     start_all()
     signal.signal(signal.SIGTERM, _graceful)
     signal.signal(signal.SIGINT, _graceful)
-    # Waitress serves production
     from waitress import serve
     serve(app, host=HOST, port=PORT)
 
