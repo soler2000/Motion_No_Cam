@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request, render_template
 from .config import HOST, PORT, POLL_INTERVAL_S
 from .models import kv_get, kv_set_many, kv_all, history
-from .threads import STATE, start_all, stop_all
+from .threads import STATE, start_all, stop_all, request_settings_reload
 from .hw import netmgr
 import signal, sys
 
@@ -22,15 +22,15 @@ def settings():
 
 @app.get("/api/stats")
 def api_stats():
-    # round some numbers for UI
     s = dict(STATE)
-    if s["distance_m"] is not None:
+    # Tidy rounding for UI
+    if s.get("distance_m") is not None:
         s["distance_m"] = round(s["distance_m"], 1)
-    if s["bus_voltage_v"] is not None:
+    if s.get("bus_voltage_v") is not None:
         s["bus_voltage_v"] = round(s["bus_voltage_v"], 2)
-    if s["current_a"] is not None:
+    if s.get("current_a") is not None:
         s["current_a"] = round(s["current_a"], 2)
-    if s["power_w"] is not None:
+    if s.get("power_w") is not None:
         s["power_w"] = round(s["power_w"], 2)
     return jsonify(s)
 
@@ -44,11 +44,12 @@ def api_history():
 def api_settings():
     data = request.get_json(force=True) or {}
     kv_set_many(data)
-    return jsonify({"ok": True})
+    # >>> HOT RELOAD: tell background threads to re-read settings immediately
+    request_settings_reload()
+    return jsonify({"ok": True, "reloaded": True})
 
 @app.post("/api/led/test")
 def api_led_test():
-    # just a placeholder to acknowledge
     return jsonify({"ok": True})
 
 @app.post("/api/wifi/scan")
@@ -72,7 +73,7 @@ def run():
     start_all()
     signal.signal(signal.SIGTERM, _graceful)
     signal.signal(signal.SIGINT, _graceful)
-    # Waitress for production-ish serving
+    # Waitress serves production
     from waitress import serve
     serve(app, host=HOST, port=PORT)
 
