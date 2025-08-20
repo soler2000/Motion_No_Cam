@@ -1,53 +1,164 @@
 {% extends "layout.html" %}
 {% block content %}
 <h2>Settings</h2>
-<div class="columns">
-  <form class="panel" id="form-led">
-    <h3>LED Configuration</h3>
-    <label>Master On <input type="checkbox" name="led.master_on" {{ 'checked' if settings['led.master_on']=='true' else '' }}></label>
-    <label>Brightness <input type="number" step="0.05" min="0" max="1" name="led.brightness" value="{{ settings['led.brightness'] }}"></label>
-    <label>White Color <input type="text" name="led.color_white" value="{{ settings['led.color_white'] }}"></label>
-    <label>Warn Color <input type="text" name="led.color_warn" value="{{ settings['led.color_warn'] }}"></label>
-    <label>Warn Enabled <input type="checkbox" name="warn.enabled" {{ 'checked' if settings['warn.enabled']=='true' else '' }}></label>
-    <label>Min Distance (m) <input type="number" step="0.1" name="distance.min_m" value="{{ settings['distance.min_m'] }}"></label>
-    <label>Max Distance (m) <input type="number" step="0.1" name="distance.max_m" value="{{ settings['distance.max_m'] }}"></label>
-    <label>Min Hz <input type="number" step="0.1" name="warn.freq_min_hz" value="{{ settings['warn.freq_min_hz'] }}"></label>
-    <label>Max Hz <input type="number" step="0.1" name="warn.freq_max_hz" value="{{ settings['warn.freq_max_hz'] }}"></label>
-    <button type="button" onclick="savePanel('form-led')">Save LED</button>
-  </form>
 
-  <form class="panel" id="form-wifi">
+<div class="columns">
+  <!-- LED Configuration -->
+  <div class="panel">
+    <h3>LED Configuration</h3>
+    <label>Master On
+      <input type="checkbox"
+             {% if settings['led.master_on']=='true' %}checked{% endif %}
+             data-setting="led.master_on">
+    </label>
+    <label>Brightness
+      <input type="range" min="0" max="1" step="0.05"
+             value="{{ settings['led.brightness'] }}"
+             data-setting="led.brightness">
+    </label>
+    <label>White Color
+      <input type="color"
+             value="{{ settings['led.color_white'] }}"
+             data-setting="led.color_white">
+    </label>
+    <label>Warn Color
+      <input type="color"
+             value="{{ settings['led.color_warn'] }}"
+             data-setting="led.color_warn">
+    </label>
+    <label>Warn Enabled
+      <input type="checkbox"
+             {% if settings['warn.enabled']=='true' %}checked{% endif %}
+             data-setting="warn.enabled">
+    </label>
+    <label>Min Distance (m)
+      <input type="number" step="0.1"
+             value="{{ settings['distance.min_m'] }}"
+             data-setting="distance.min_m">
+    </label>
+    <label>Max Distance (m)
+      <input type="number" step="0.1"
+             value="{{ settings['distance.max_m'] }}"
+             data-setting="distance.max_m">
+    </label>
+    <label>Min Freq (Hz)
+      <input type="number" step="0.1"
+             value="{{ settings['warn.freq_min_hz'] }}"
+             data-setting="warn.freq_min_hz">
+    </label>
+    <label>Max Freq (Hz)
+      <input type="number" step="0.1"
+             value="{{ settings['warn.freq_max_hz'] }}"
+             data-setting="warn.freq_max_hz">
+    </label>
+  </div>
+
+  <!-- Wi‑Fi Access -->
+  <div class="panel">
     <h3>Wi‑Fi Access</h3>
-    <label>AP SSID <input type="text" name="wifi.ap_ssid" value="{{ settings['wifi.ap_ssid'] }}"></label>
-    <label>AP Password <input type="text" name="wifi.ap_password" value="{{ settings['wifi.ap_password'] }}"></label>
-    <label>Try Seconds <input type="number" name="wifi.try_seconds" value="{{ settings['wifi.try_seconds'] }}"></label>
-    <div class="wifi-scan">
+    <label>AP SSID
+      <input type="text" value="{{ settings['wifi.ap_ssid'] }}"
+             data-setting="wifi.ap_ssid">
+    </label>
+    <label>AP Password
+      <input type="password" value="{{ settings['wifi.ap_password'] }}"
+             data-setting="wifi.ap_password">
+    </label>
+    <label>Try Seconds
+      <input type="number" min="5" step="1"
+             value="{{ settings['wifi.try_seconds'] }}"
+             data-setting="wifi.try_seconds">
+    </label>
+    <div class="row" style="gap:8px; margin-top:6px;">
       <button type="button" onclick="wifiScan()">Scan Networks</button>
-      <ul id="wifi_list"></ul>
-    </div>
-    <div>
       <input id="wifi_ssid" placeholder="SSID">
       <input id="wifi_pass" placeholder="Password">
       <button type="button" onclick="wifiConnect()">Connect</button>
     </div>
-    <button type="button" onclick="savePanel('form-wifi')">Save Wi‑Fi</button>
-  </form>
+    <ul id="wifi_list"></ul>
+  </div>
 
-  <form class="panel" id="form-system">
+  <!-- System -->
+  <div class="panel">
     <h3>System</h3>
-    <label>Shutdown Voltage (V; 0=disabled)
-      <input type="number" step="0.01" name="battery.shutdown_voltage" value="{{ settings['battery.shutdown_voltage'] }}">
+    <label>INA219 Shunt (Ω)
+      <input type="number" step="0.01"
+             value="{{ settings['ina219.shunt_ohms'] }}"
+             data-setting="ina219.shunt_ohms">
     </label>
-    <label>Empty Voltage (V)
-      <input type="number" step="0.01" name="battery.voltage_empty" value="{{ settings['battery.voltage_empty'] }}">
+    <label>Battery Full (V)
+      <input type="number" step="0.01"
+             value="{{ settings['battery.voltage_full'] }}"
+             data-setting="battery.voltage_full">
     </label>
-    <label>Full Voltage (V)
-      <input type="number" step="0.01" name="battery.voltage_full" value="{{ settings['battery.voltage_full'] }}">
+    <label>Battery Empty (V)
+      <input type="number" step="0.01"
+             value="{{ settings['battery.voltage_empty'] }}"
+             data-setting="battery.voltage_empty">
     </label>
-    <label>Shunt Ohms
-      <input type="number" step="0.01" name="ina219.shunt_ohms" value="{{ settings['ina219.shunt_ohms'] }}">
+    <label>Shutdown at (V, 0=disabled)
+      <input type="number" step="0.01"
+             value="{{ settings['battery.shutdown_voltage'] }}"
+             data-setting="battery.shutdown_voltage">
     </label>
-    <button type="button" onclick="savePanel('form-system')">Save System</button>
-  </form>
+  </div>
 </div>
+
+<!-- Tiny toast to confirm updates -->
+<div id="toast" style="position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+  background:#1d2631;color:#e7eef7;padding:8px 12px;border-radius:8px;display:none;">
+  Saved
+</div>
+
+<script>
+async function updateSetting(key, value) {
+  try {
+    const body = {}; body[key] = value;
+    await fetch("/api/settings", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body)
+    });
+    const t = document.getElementById('toast');
+    t.style.display = 'block';
+    setTimeout(()=> t.style.display = 'none', 700);
+  } catch (e) {
+    console.error("Update failed:", key, e);
+  }
+}
+
+function attachAutoSave() {
+  document.querySelectorAll("[data-setting]").forEach(el => {
+    const handler = async () => {
+      let val = (el.type === "checkbox") ? (el.checked ? "true" : "false") : el.value;
+      await updateSetting(el.dataset.setting, val);
+    };
+    // Instant updates for color/range/text/password; change for numbers to avoid spam
+    if (["range","text","password","color"].includes(el.type)) {
+      el.addEventListener("input", handler);
+      el.addEventListener("change", handler);
+    } else {
+      el.addEventListener("change", handler);
+    }
+  });
+}
+// Wi‑Fi helpers
+async function wifiScan() {
+  const list = document.getElementById('wifi_list');
+  list.innerHTML = '<li>Scanning…</li>';
+  const res = await fetch('/api/wifi/scan', {method:'POST'});
+  const nets = await res.json();
+  list.innerHTML = nets.map(n => `<li>${n.ssid} — ${n.signal ?? '--'}% — ${n.security}</li>`).join('');
+}
+async function wifiConnect() {
+  const ssid = document.getElementById('wifi_ssid').value;
+  const password = document.getElementById('wifi_pass').value;
+  await fetch('/api/wifi/connect', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ssid, password})
+  });
+}
+window.addEventListener('DOMContentLoaded', attachAutoSave);
+</script>
 {% endblock %}
