@@ -1,0 +1,17 @@
+[Unit]
+Description=Motion_No_Cam Flask Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/Motion_No_Cam
+Environment=FLASK_ENV=production
+ExecStart=/opt/Motion_No_Cam/venv/bin/python -m app.main
+Restart=on-failure
+User=root
+AmbientCapabilities=CAP_NET_ADMIN
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
