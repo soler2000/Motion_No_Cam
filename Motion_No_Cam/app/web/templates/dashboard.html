@@ -1,0 +1,29 @@
+{% extends "layout.html" %}
+{% block content %}
+<section class="grid">
+  <div class="tile">
+    <h2>Distance</h2>
+    <div class="big"><span id="distance">--.-</span> m</div>
+  </div>
+  <div class="tile">
+    <h2>Battery</h2>
+    <div class="row">
+      <div><b>%</b> <span id="bat_pct">--</span></div>
+      <div><b>V</b> <span id="bus_v">--</span></div>
+      <div><b>A</b> <span id="curr_a">--</span></div>
+      <div><b>W</b> <span id="power_w">--</span></div>
+    </div>
+    <canvas id="batChart" height="120"></canvas>
+  </div>
+  <div class="tile">
+    <h2>System</h2>
+    <div class="row">
+      <div><b>Wi‑Fi</b> <span id="wifi">--</span>%</div>
+      <div><b>CPU</b> <span id="cpu_t">--</span>°C</div>
+      <div><b>Load</b> <span id="load1">--</span></div>
+      <div><b>LED</b> <span id="led_mode">--</span></div>
+    </div>
+  </div>
+</section>
+<script>window.POLL={{ poll|tojson }};</script>
+{% endblock %}
