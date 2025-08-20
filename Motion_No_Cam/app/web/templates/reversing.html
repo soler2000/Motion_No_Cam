@@ -1,0 +1,10 @@
+{% extends "layout.html" %}
+{% block content %}
+<section class="center">
+  <div class="rev-box">
+    <div class="rev-distance" id="rev_distance">--.- m</div>
+    <div class="rev-status" id="rev_status">LED: --</div>
+  </div>
+</section>
+<script>window.POLL={{ poll|tojson }};</script>
+{% endblock %}
