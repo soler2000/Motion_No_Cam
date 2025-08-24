@@ -1,10 +1,27 @@
 {% extends "layout.html" %}
 {% block content %}
-<section class="center">
-  <div class="rev-box">
-    <div class="rev-distance" id="rev_distance">--.- m</div>
-    <div class="rev-status" id="rev_status">LED: --</div>
+<h2>Reversing</h2>
+<div class="panel">
+  <div class="video-wrap">
+    <iframe id="webrtc_frame" allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+    <div class="overlay">Distance: <span id="rev_distance">--.- m</span></div>
   </div>
-</section>
-<script>window.POLL={{ poll|tojson }};</script>
+  <div id="rev_status" style="margin-top:6px;">LED: --</div>
+</div>
+<script>
+(function () {
+  const host = location.hostname;
+  const url = `http://${host}:8889/reverse`; // MediaMTX WebRTC player
+  const f = document.getElementById('webrtc_frame');
+  f.src = url;
+  function size(){ const w=document.querySelector('.video-wrap').clientWidth; f.style.width='100%'; f.style.height=(w*9/16)+'px'; }
+  window.addEventListener('resize', size);
+  window.addEventListener('load', size);
+})();
+</script>
+<style>
+.video-wrap{position:relative;width:100%;aspect-ratio:16/9;background:#111;border-radius:8px;overflow:hidden}
+.video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.video-wrap .overlay{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;padding:4px 8px;border-radius:6px;font-weight:700}
+</style>
 {% endblock %}

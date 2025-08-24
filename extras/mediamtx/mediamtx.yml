@@ -1,0 +1,10 @@
+logLevel: info
+paths:
+  reverse:
+    source: rpiCamera
+    sourceOnDemand: yes
+    rpiCameraWidth: 1280
+    rpiCameraHeight: 720
+    rpiCameraFPS: 30
+    rpiCameraBitrate: 1500000
+    rpiCameraIDRPeriod: 30
