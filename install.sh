@@ -1,156 +1,123 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_DST_DIR="/opt/Motion_No_Cam"
-VENV_DIR="$APP_DST_DIR/venv"
-UNIT_PATH="/etc/systemd/system/motion_wide.service"
+LOG_DIR="${LOG_DIR:-/var/log/motion_no_cam}"
+LOG_FILE="$LOG_DIR/install_$(date +%Y%m%d_%H%M%S).log"
+mkdir -p "$LOG_DIR"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "[+] Apt deps"
-sudo apt-get update -y
-sudo apt-get install -y python3-venv python3-dev build-essential \
-                        network-manager i2c-tools git curl rsync tar
+echo "== Motion_No_Cam installer ($(date)) =="
 
-echo "[+] Enable NetworkManager (ok if already on)"
-sudo systemctl enable NetworkManager.service --now || true
-
-echo "[+] I2C preflight"
-if [ ! -e /dev/i2c-1 ]; then
-  echo "[!] /dev/i2c-1 missing. Enable I2C then reboot:"
-  echo "    sudo raspi-config nonint do_i2c 0 && sudo reboot"
+# --- Preflight ---
+if [[ $EUID -ne 0 ]]; then
+  echo "Please run with sudo:  sudo ./install.sh"
   exit 1
 fi
-if command -v i2cdetect >/dev/null 2>&1; then
-  if ! i2cdetect -y 1 | grep -q -E '29|43'; then
-    echo "[i] Warning: i2cdetect didn't find 0x29 or 0x43 — check wiring/addresses."
-  fi
+
+# Detect Pi + OS
+ARCH="$(dpkg --print-architecture || true)"
+OS_CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+echo "Arch: $ARCH | OS: $OS_CODENAME"
+
+if ! command -v python3 >/dev/null; then
+  apt-get update
+  apt-get install -y python3 python3-venv python3-full
 fi
 
-echo "[+] Sync app to $APP_DST_DIR"
-sudo mkdir -p "$APP_DST_DIR"
-# keep venv if exists, replace code
-sudo rsync -a --delete --exclude 'venv' "$APP_SRC_DIR/." "$APP_DST_DIR/."
-
-echo "[+] Python venv + requirements"
-if [ ! -d "$VENV_DIR" ]; then
-  sudo python3 -m venv "$VENV_DIR"
+# Enable I2C (safe if repeated)
+if command -v raspi-config >/dev/null 2>&1; then
+  raspi-config nonint do_i2c 0 || true
 fi
-sudo "$VENV_DIR/bin/pip" install --upgrade pip wheel
-if [ -f "$APP_DST_DIR/requirements.txt" ]; then
-  sudo "$VENV_DIR/bin/pip" install -r "$APP_DST_DIR/requirements.txt"
-fi
+adduser pi i2c || true
+adduser pi video || true
 
-echo "[+] Systemd unit for Motion_No_Cam"
-sudo tee "$UNIT_PATH" > /dev/null <<'UNIT'
-[Unit]
-Description=Motion_No_Cam Flask Service
-After=network-online.target i2c-dev.service
-Wants=network-online.target i2c-dev.service
+# --- System deps ---
+apt-get update
+apt-get install -y git curl ffmpeg libatlas-base-dev
 
-[Service]
-Type=simple
-WorkingDirectory=/opt/Motion_No_Cam
-Environment=FLASK_ENV=production
-ExecStart=/opt/Motion_No_Cam/venv/bin/python -m app.main
-Restart=on-failure
-User=root
-AmbientCapabilities=CAP_NET_ADMIN
-NoNewPrivileges=false
-# wait for /dev/i2c-1 (race guard)
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 10); do [ -e /dev/i2c-1 ] && exit 0; sleep 1; done; exit 1'
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-echo "[+] Reload systemd + (re)start Motion_No_Cam"
-sudo systemctl daemon-reload
-sudo systemctl enable --now motion_wide.service
-
-###############################################################################
-# MediaMTX (WebRTC camera) install / upgrade
-###############################################################################
-MEDIAMTX_DIR="/opt/mediamtx"
-MEDIAMTX_UNIT="/etc/systemd/system/mediamtx.service"
-MEDIAMTX_VER="${MEDIAMTX_VER:-v1.12.3}"
-
-echo "[+] Install/Update MediaMTX ($MEDIAMTX_VER)"
-ARCH="$(uname -m)"
-if [ "$ARCH" = "armv7l" ]; then
-  PKG="mediamtx_${MEDIAMTX_VER}_linux_armv7.tar.gz"
-elif [ "$ARCH" = "aarch64" ]; then
-  PKG="mediamtx_${MEDIAMTX_VER}_linux_arm64.tar.gz"
+# --- App directory & venv ---
+APP_DIR="/home/pi/Motion_No_Cam"
+if [[ ! -d "$APP_DIR" ]]; then
+  echo "Cloning repo into $APP_DIR"
+  sudo -u pi git clone https://github.com/soler2000/Motion_No_Cam.git "$APP_DIR"
 else
-  echo "[!] Unsupported arch: $ARCH (need armv7l or aarch64)"; PKG=""
+  echo "Updating existing repo in $APP_DIR"
+  pushd "$APP_DIR"
+  sudo -u pi git pull --rebase
+  popd
 fi
 
-if [ -n "$PKG" ]; then
-  TMPD="$(mktemp -d)"
-  pushd "$TMPD" >/dev/null
-  # Only (re)download if binary missing or version changed
-  NEED_DL=true
-  if [ -x "$MEDIAMTX_DIR/mediamtx" ]; then
-    CURR_VER="$("$MEDIAMTX_DIR/mediamtx" --version 2>/dev/null || true)"
-    case "$CURR_VER" in
-      *"$MEDIAMTX_VER"*) NEED_DL=false ;;
-    esac
-  fi
-  if $NEED_DL; then
-    echo "[+] Downloading $PKG"
-    curl -fL -o "$PKG" "https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VER}/${PKG}"
-    sudo rm -rf "$MEDIAMTX_DIR"
-    sudo mkdir -p "$MEDIAMTX_DIR"
-    sudo tar -xzf "$PKG" -C "$MEDIAMTX_DIR"
-    sudo useradd -r -s /usr/sbin/nologin mediamtx 2>/dev/null || true
-    sudo usermod -a -G video mediamtx || true
-    sudo chown -R mediamtx:mediamtx "$MEDIAMTX_DIR"
-  else
-    echo "[i] MediaMTX already at $MEDIAMTX_VER — skip download"
-  fi
-  popd >/dev/null
-  rm -rf "$TMPD"
+cd "$APP_DIR"
+if [[ ! -d venv ]]; then
+  sudo -u pi python3 -m venv venv
+fi
+./venv/bin/pip install --upgrade pip wheel setuptools
+if [[ -f requirements.txt ]]; then
+  ./venv/bin/pip install -r requirements.txt
+fi
 
-  echo "[+] Write MediaMTX config"
-  sudo tee "$MEDIAMTX_DIR/mediamtx.yml" > /dev/null <<'YML'
-logLevel: info
-paths:
-  reverse:
-    source: rpiCamera
-    sourceOnDemand: yes
-    rpiCameraWidth: 1280
-    rpiCameraHeight: 720
-    rpiCameraFPS: 30
-    rpiCameraBitrate: 1500000
-    rpiCameraIDRPeriod: 30
-    # rpiCameraHFlip: true
-    # rpiCameraVFlip: true
-YML
+# --- MediaMTX (for low-latency WebRTC) ---
+MEDIAMTX_DIR="/home/pi/mediamtx"
+if [[ ! -x "$MEDIAMTX_DIR/mediamtx" ]]; then
+  mkdir -p "$MEDIAMTX_DIR"
+  pushd "$MEDIAMTX_DIR"
+  # auto-pick latest release for arm64/armhf
+  case "$ARCH" in
+    arm64) URL="https://github.com/bluenviron/mediamtx/releases/latest/download/mediamtx_linux_arm64.tar.gz" ;;
+    armhf|arm) URL="https://github.com/bluenviron/mediamtx/releases/latest/download/mediamtx_linux_armv7.tar.gz" ;;
+    *) echo "Unknown arch $ARCH for MediaMTX, skipping"; URL="";;
+  esac
+  if [[ -n "$URL" ]]; then
+    curl -L "$URL" | tar xz
+    chown -R pi:pi "$MEDIAMTX_DIR"
+  fi
+  popd
+fi
 
-  echo "[+] Systemd unit for MediaMTX"
-  sudo tee "$MEDIAMTX_UNIT" > /dev/null <<'SERVICE'
+# --- systemd units ---
+cat >/etc/systemd/system/mediamtx.service <<'EOF'
 [Unit]
-Description=MediaMTX (WebRTC/RTSP/RTMP/HLS) server
+Description=MediaMTX (WebRTC/RTSP server)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=mediamtx
-Group=mediamtx
-WorkingDirectory=/opt/mediamtx
-ExecStart=/opt/mediamtx/mediamtx
-Restart=on-failure
+User=pi
+Group=pi
+ExecStart=/home/pi/mediamtx/mediamtx
+Restart=always
+RestartSec=2
 
 [Install]
 WantedBy=multi-user.target
-SERVICE
+EOF
 
-  echo "[+] Reload systemd + (re)start MediaMTX"
-  sudo systemctl daemon-reload
-  sudo systemctl enable --now mediamtx.service
-else
-  echo "[!] Skipping MediaMTX install due to unsupported arch"
-fi
+cat >/etc/systemd/system/motion_no_cam.service <<'EOF'
+[Unit]
+Description=Motion_No_Cam Flask Service
+After=network-online.target mediamtx.service
+Wants=network-online.target
 
-echo "[✓] Install complete."
-echo "    App:      http://$(hostname -I | awk '{print $1}'):8080"
-echo "    WebRTC:   http://$(hostname -I | awk '{print $1}'):8889/reverse"
+[Service]
+WorkingDirectory=/home/pi/Motion_No_Cam/app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/Motion_No_Cam/venv/bin/python app.py
+User=pi
+Group=pi
+# Access to camera/video and I2C without /dev/mem
+SupplementaryGroups=video i2c
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now mediamtx.service
+systemctl enable --now motion_no_cam.service
+
+echo ""
+echo "Install complete."
+echo "Logs: $LOG_FILE"
+echo "If the app isn't reachable, run:  sudo systemctl status motion_no_cam --no-pager"
