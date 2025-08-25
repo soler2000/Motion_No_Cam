@@ -1,78 +1,82 @@
+import os
+import logging
 from flask import Flask, jsonify, request, render_template
-from .config import HOST, PORT, POLL_INTERVAL_S
-from .models import kv_get, kv_set_many, kv_all, history
-from .threads import STATE, start_all, stop_all, request_settings_reload
-from .hw import netmgr
-import signal, sys
 
-app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
+# Models (DB helpers)
+from .models import kv_get, kv_set_many, kv_all
 
-@app.route("/")
-def dashboard():
-    return render_template("dashboard.html", poll=POLL_INTERVAL_S)
+# Threads (hardware + sampling) – degrade gracefully if missing
+try:
+    from .threads import STATE, start_all, stop_all, request_settings_reload
+except Exception:
+    STATE = {}
+    def start_all(): print("threads: not available; running without background threads")
+    def stop_all(): pass
+    def request_settings_reload(): pass
 
-@app.route("/reversing")
-def reversing():
-    return render_template("reversing.html", poll=POLL_INTERVAL_S)
+# Flask setup
+app = Flask(
+    __name__,
+    static_folder="web/static",
+    template_folder="web/templates",
+)
 
-@app.route("/settings")
-def settings():
-    all_kv = kv_all()
-    return render_template("settings.html", settings=all_kv)
+log = logging.getLogger("main")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-@app.get("/api/stats")
-def api_stats():
-    s = dict(STATE)
-    if s.get("distance_m") is not None:
-        s["distance_m"] = round(s["distance_m"], 1)
-    if s.get("bus_voltage_v") is not None:
-        s["bus_voltage_v"] = round(s["bus_voltage_v"], 2)
-    if s.get("current_a") is not None:
-        s["current_a"] = round(s["current_a"], 2)
-    if s.get("power_w") is not None:
-        s["power_w"] = round(s["power_w"], 2)
-    return jsonify(s)
+@app.get("/")
+def home():
+    return render_template("index.html")
 
-@app.get("/api/history")
-def api_history():
-    metric = request.args.get("metric","battery")
-    minutes = int(request.args.get("minutes","180"))
-    return jsonify(history(metric, minutes))
+@app.get("/api/state")
+def api_state():
+    # Minimal base info
+    base = {
+        "db_path": os.environ.get("MOTION_DB", "/opt/Motion_No_Cam/motion.db"),
+    }
+    # Merge STATE if present
+    try:
+        if isinstance(STATE, dict):
+            base.update(STATE)
+    except Exception:
+        pass
+    return jsonify(base)
+
+@app.get("/api/settings")
+def api_settings_get():
+    return jsonify(kv_all())
 
 @app.post("/api/settings")
-def api_settings():
-    data = request.get_json(force=True) or {}
+def api_settings_set():
+    data = request.get_json(force=True, silent=True) or {}
+    # Accept dict or list of {key,value}
+    if isinstance(data, list):
+        data = {
+            item["key"]: item.get("value")
+            for item in data
+            if isinstance(item, dict) and "key" in item
+        }
     kv_set_many(data)
-    request_settings_reload()   # 🔄 Trigger LED reload
-    return jsonify({"ok": True, "reloaded": True})
-
-@app.post("/api/led/test")
-def api_led_test():
+    request_settings_reload()
     return jsonify({"ok": True})
 
-@app.post("/api/wifi/scan")
-def api_wifi_scan():
-    nets = netmgr.scan_networks()
-    return jsonify(nets)
-
-@app.post("/api/wifi/connect")
-def api_wifi_connect():
-    data = request.get_json(force=True) or {}
-    ssid = data.get("ssid","")
-    password = data.get("password","")
-    ok = netmgr.connect_wifi(ssid, password)
-    return jsonify({"ok": ok})
-
-def _graceful(*_):
-    stop_all()
-    sys.exit(0)
+@app.post("/api/reload")
+def api_reload():
+    request_settings_reload()
+    return jsonify({"ok": True})
 
 def run():
-    start_all()
-    signal.signal(signal.SIGTERM, _graceful)
-    signal.signal(signal.SIGINT, _graceful)
-    from waitress import serve
-    serve(app, host=HOST, port=PORT)
+    log.info("Starting background threads (if available)...")
+    try:
+        start_all()
+        log.info("Background threads started")
+    except Exception as e:
+        log.exception("Failed to start background threads: %s", e)
+
+    host = "0.0.0.0"
+    port = int(os.environ.get("PORT", "5000"))
+    log.info("Starting Flask on %s:%s", host, port)
+    app.run(host=host, port=port, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
     run()
