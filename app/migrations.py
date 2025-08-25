@@ -139,4 +139,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sqlite3
+    from .config import DB_PATH
+    print("Running migrations on", DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    migrate(conn)
+    conn.close()
+    print("Migrations complete.")
