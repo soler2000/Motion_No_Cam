@@ -1,54 +1,104 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ---------------------------------------
+# Config (change if you use a different fork/branch)
+# ---------------------------------------
+REPO_URL="${REPO_URL:-https://github.com/soler2000/Motion_No_Cam.git}"
+BRANCH="${BRANCH:-Instal-1}"
 APP_DIR="/opt/Motion_No_Cam"
-VENV="${APP_DIR}/venv"
+PY_BIN="/usr/bin/python3"
+VENVDIR="${APP_DIR}/venv"
+SERVICE_NAME="motion_wide.service"
 DB_PATH="${APP_DIR}/motion.db"
-SERVICE_FILE="/etc/systemd/system/motion_wide.service"
 
-log() { printf "[+] %s\n" "$*"; }
-warn() { printf "[!] %s\n" "$*" >&2; }
+# ---------------------------------------
+# Root check
+# ---------------------------------------
+if [[ $EUID -ne 0 ]]; then
+  echo "[!] Please run as root (sudo -i then rerun)."
+  exit 1
+fi
 
-sudo install -m 644 "$APP_DIR/systemd/motion_wide.service" /etc/systemd/system/motion_wide.service
-
-# --- Packages ---------------------------------------------------------------
-log "APT update & base packages"
+echo "[+] APT update / base packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y \
-  git python3 python3-venv python3-pip sqlite3 \
-  network-manager i2c-tools raspi-config
+  git curl ca-certificates \
+  python3 python3-venv python3-pip python3-dev \
+  build-essential \
+  sqlite3 \
+  i2c-tools raspi-config \
+  network-manager
 
-# --- Enable I²C (idempotent) -----------------------------------------------
-log "Enable I2C (ok if already enabled)"
-if command -v raspi-config >/dev/null 2>&1; then
+echo "[+] Ensure NetworkManager enabled (ok if already running)"
+systemctl enable NetworkManager || true
+systemctl start  NetworkManager || true
+
+# ---------------------------------------
+# I2C preflight
+# ---------------------------------------
+if [[ ! -e /dev/i2c-1 ]]; then
+  echo "[!] /dev/i2c-1 missing. Enabling I2C then you MUST reboot:"
   raspi-config nonint do_i2c 0 || true
-else
-  warn "raspi-config not found; enable I2C manually if needed."
+  echo "    Now run:  sudo reboot"
+  exit 0
 fi
 
-# --- Python venv ------------------------------------------------------------
-log "Create venv and install Python deps"
-python3 -m venv "${VENV}"
-"${VENV}/bin/pip" install --upgrade pip wheel
-if [ -f "${APP_DIR}/requirements.txt" ]; then
-  "${VENV}/bin/pip" install -r "${APP_DIR}/requirements.txt"
+# ---------------------------------------
+# Deploy app under /opt (root-owned)
+# ---------------------------------------
+echo "[+] Create ${APP_DIR}"
+mkdir -p "${APP_DIR}"
+# If not a git repo yet, clone fresh; else fetch/switch.
+if [[ ! -d "${APP_DIR}/.git" ]]; then
+  echo "[+] Cloning ${REPO_URL} (branch ${BRANCH})"
+  git clone --branch "${BRANCH}" --single-branch "${REPO_URL}" "${APP_DIR}"
 else
-  "${VENV}/bin/pip" install flask adafruit-blinka adafruit-circuitpython-vl53l1x adafruit-circuitpython-ina219
+  echo "[+] Repo already present; fetching latest ${BRANCH}"
+  git -C "${APP_DIR}" fetch origin
+  git -C "${APP_DIR}" checkout "${BRANCH}"
+  git -C "${APP_DIR}" reset --hard "origin/${BRANCH}"
+  git -C "${APP_DIR}" clean -fd
 fi
 
-# --- One-time DB migration now ---------------------------------------------
-log "Run DB migrations now"
+# Make sure root owns the tree
 chown -R root:root "${APP_DIR}"
-chmod -R u+rwX,go+rX "${APP_DIR}"
-DB_ENV="MOTION_DB=${DB_PATH}"
-env ${DB_ENV} "${VENV}/bin/python" -m app.migrations || {
-  warn "Migrations returned non-zero; continuing (service will run them on start too)."
-}
 
-# --- Systemd service --------------------------------------------------------
-log "Install systemd unit: ${SERVICE_FILE}"
-tee "${SERVICE_FILE}" >/dev/null <<UNIT
+# ---------------------------------------
+# Python venv + deps
+# ---------------------------------------
+echo "[+] Python venv & dependencies"
+if [[ ! -d "${VENVDIR}" ]]; then
+  "${PY_BIN}" -m venv "${VENVDIR}"
+fi
+# Always upgrade pip/setuptools/wheel for smoother builds
+"${VENVDIR}/bin/pip" install --upgrade pip setuptools wheel
+
+REQ_FILE="${APP_DIR}/requirements.txt"
+if [[ -f "${REQ_FILE}" ]]; then
+  echo "[+] Installing requirements.txt"
+  "${VENVDIR}/bin/pip" install -r "${REQ_FILE}"
+else
+  echo "[!] requirements.txt not found; installing minimal known deps"
+  "${VENVDIR}/bin/pip" install flask jinja2 waitress psutil ina219 adafruit-blinka
+fi
+
+# ---------------------------------------
+# Ensure DB path exists and is writable by root
+# ---------------------------------------
+echo "[+] Preparing DB path ${DB_PATH}"
+touch "${DB_PATH}"
+chown root:root "${DB_PATH}"
+chmod 0644 "${DB_PATH}"
+
+# ---------------------------------------
+# systemd unit
+# ---------------------------------------
+UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}"
+echo "[+] Writing ${UNIT_FILE}"
+cat > "${UNIT_FILE}" <<UNIT
+# ${SERVICE_NAME}
 [Unit]
 Description=Motion_No_Cam Flask Service
 After=network-online.target i2c-dev.service
@@ -56,14 +106,16 @@ Wants=network-online.target i2c-dev.service
 
 [Service]
 Type=simple
+User=root
 WorkingDirectory=${APP_DIR}
 Environment=FLASK_ENV=production
 Environment=MOTION_DB=${DB_PATH}
-ExecStartPre=${VENV}/bin/python -m app.migrations
+# Run DB migrations first (must succeed but be harmless if up-to-date)
+ExecStartPre=${VENVDIR}/bin/python -m app.migrations
+# wait for /dev/i2c-1 to appear (race guard)
 ExecStartPre=/bin/sh -c 'for i in \$(seq 1 10); do [ -e /dev/i2c-1 ] && exit 0; sleep 1; done; exit 1'
-ExecStart=${VENV}/bin/python -m app.main
+ExecStart=${VENVDIR}/bin/python -m app.main
 Restart=on-failure
-User=root
 AmbientCapabilities=CAP_NET_ADMIN
 NoNewPrivileges=false
 
@@ -71,12 +123,11 @@ NoNewPrivileges=false
 WantedBy=multi-user.target
 UNIT
 
-# --- Enable + start ---------------------------------------------------------
-log "Reload systemd, enable and start service"
+echo "[+] systemd reload/enable/start"
 systemctl daemon-reload
-systemctl enable motion_wide.service
-systemctl restart motion_wide.service
+systemctl enable "${SERVICE_NAME}"
+systemctl restart "${SERVICE_NAME}"
 
-log "Done. Check status with:"
-echo "  sudo systemctl status motion_wide.service -n 100 --no-pager"
-log "Web UI at: http://<pi-ip>:5000"
+echo "[✓] Install complete."
+echo "    Status:   systemctl status ${SERVICE_NAME} -n 100 --no-pager"
+echo "    Web UI:   http://<this-pi-ip>:5000/"
