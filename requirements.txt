@@ -11,7 +11,7 @@ psutil==6.0.0
 
 # --- I2C / Sensors / LEDs ---
 smbus2==0.4.3
-ina219==1.4.0
+pi-ina219==1.4.0
 adafruit-blinka==8.46.0
 adafruit-circuitpython-busdevice==5.2.9
 adafruit-circuitpython-vl53l1x==1.2.10
