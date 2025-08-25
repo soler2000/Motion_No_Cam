@@ -11,6 +11,12 @@ sudo apt-get update -y
 sudo apt-get install -y python3-venv python3-dev build-essential \
                         network-manager i2c-tools git curl rsync tar
 
+
+echo "[INFO] Installing system dependencies..."
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+    sqlite3 libsqlite3-0 libsqlite3-dev
+
 echo "[+] Enable NetworkManager (ok if already on)"
 sudo systemctl enable NetworkManager.service --now || true
 
