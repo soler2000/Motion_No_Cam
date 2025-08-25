@@ -1,12 +1,17 @@
+# /etc/systemd/system/motion_wide.service
 [Unit]
 Description=Motion_No_Cam Flask Service
-After=network-online.target
-Wants=network-online.target
+After=network-online.target i2c-dev.service
+Wants=network-online.target i2c-dev.service
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/Motion_No_Cam
-Environment=FLASK_ENV=production
+Environment=MOTION_DB=/opt/Motion_No_Cam/motion.db
+# Run DB migrations *as the same user* as the service:
+ExecStartPre=/opt/Motion_No_Cam/venv/bin/python -m app.migrations
+# Wait for I2C to exist (race guard)
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 10); do [ -e /dev/i2c-1 ] && exit 0; sleep 1; done; exit 1'
 ExecStart=/opt/Motion_No_Cam/venv/bin/python -m app.main
 Restart=on-failure
 User=root
