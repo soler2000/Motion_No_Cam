@@ -1,7 +1,17 @@
-Flask==3.0.3
-waitress==3.0.0
+# Web
+flask==2.3.3
+werkzeug==2.3.7
+waitress==3.0.0      # production WSGI server
+
+# System metrics
 psutil==6.0.0
-adafruit-blinka==8.48.0
-adafruit-circuitpython-vl53l1x==1.2.5
-adafruit-circuitpython-neopixel==6.3.12
+
+# I2C / sensors
+adafruit-blinka==8.37.0
+adafruit-circuitpython-vl53l1x==3.7.10
+
+# INA219 current sensor (Pi-native lib used in older setups)
 pi-ina219==1.4.1
+
+# If your code uses Adafruit's INA219 instead, swap the above line for:
+# adafruit-circuitpython-ina219==4.5.9
