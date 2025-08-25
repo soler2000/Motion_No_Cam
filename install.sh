@@ -9,6 +9,8 @@ SERVICE_FILE="/etc/systemd/system/motion_wide.service"
 log() { printf "[+] %s\n" "$*"; }
 warn() { printf "[!] %s\n" "$*" >&2; }
 
+sudo install -m 644 "$APP_DIR/systemd/motion_wide.service" /etc/systemd/system/motion_wide.service
+
 # --- Packages ---------------------------------------------------------------
 log "APT update & base packages"
 export DEBIAN_FRONTEND=noninteractive
